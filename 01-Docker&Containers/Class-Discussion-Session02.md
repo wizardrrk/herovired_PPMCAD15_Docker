@@ -1,4 +1,4 @@
-# Docker Training - Session 2
+# Class Discussion - Session 2
 ## Understanding Container Ephemeral Nature and Data Persistence
 
 ---

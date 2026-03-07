@@ -39,7 +39,7 @@ The `dist/` folder is plain JavaScript - it doesn't care about TypeScript, linte
 That's exactly what multi-stage does - **stage 1** is your *workshop* with all the tools, **stage 2** is the *delivery truck* carrying only the finished product. In a real company with a large codebase, dev dependencies can easily be **500+ MB** while production deps might be just **50–100 MB**.
 
 ```bash
-docker build -f Dockerfile -t demo-multi .
+docker build -f Dockerfile.multistage -t demo-multi .
 ```
 
 This uses two stages. The final image only contains production dependencies and the compiled JavaScript output.

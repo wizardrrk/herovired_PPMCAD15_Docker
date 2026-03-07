@@ -1,4 +1,4 @@
-# Container Training - Session 5
+# Class Discussion - Session 5
 ## Selecting the Right AWS Compute Service & Container Platform Comparisons
 
 ---

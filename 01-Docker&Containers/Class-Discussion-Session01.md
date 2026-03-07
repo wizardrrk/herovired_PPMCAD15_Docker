@@ -1,4 +1,4 @@
-# Docker Training - Session 1
+# Class Discussion - Session 1
 ---
 
 ## Traditional Application Deployment

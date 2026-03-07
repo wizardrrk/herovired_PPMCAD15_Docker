@@ -1,4 +1,4 @@
-# Docker Training - Session 3 (Continued)
+# Class Discussion - Session 3 (Continued)
 ## Monolith vs Microservices & Running Multi-Container Applications
 
 ---

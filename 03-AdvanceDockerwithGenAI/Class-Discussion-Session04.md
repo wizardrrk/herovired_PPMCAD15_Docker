@@ -1,4 +1,4 @@
-# Docker Training - Session 4
+# Class Discussion - Session 4
 ## Golden Base Image Workflow & Troubleshooting Containers
 
 ---

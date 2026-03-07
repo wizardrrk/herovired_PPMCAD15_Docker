@@ -1,4 +1,4 @@
-# Docker Training - Session 3
+# Class Discussion - Session 3
 ## Dockerfile ARG & ENV Instructions + Image Tagging Best Practices
 
 ---
