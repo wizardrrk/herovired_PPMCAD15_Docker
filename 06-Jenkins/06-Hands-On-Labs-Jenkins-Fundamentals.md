@@ -211,7 +211,7 @@ python3 --version
 
 echo ""
 echo "--- Installing Dependencies ---"
-pip3 install -r requirements.txt --quiet
+pip3 install -r requirements.txt --quiet --break-system-packages
 
 echo ""
 echo "--- Running Tests ---"
@@ -257,6 +257,9 @@ ngrok http 8080
 3. Content type: `application/json`
 4. Events: "Just the push event"
 5. Active: ✓
+
+**Configure this in Jenkins:**
+Configure your Jenkins job to use the webhook trigger: In your job/pipeline configuration, under "Build Triggers," check the option "GitHub hook trigger for GITScm polling." This tells Jenkins to start a build whenever it receives a push event from GitHub.
 
 **Test it:** Make a small change to your repo, push it, and watch Jenkins auto-trigger a build.
 

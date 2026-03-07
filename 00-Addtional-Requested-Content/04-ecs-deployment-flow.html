@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECS Fargate Deployment Flow</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #0a0e1a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 6px;
+    background: linear-gradient(135deg, #38bdf8, #06b6d4, #22d3ee);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+  }
+
+  .subtitle {
+    text-align: center;
+    color: #64748b;
+    font-size: 14px;
+    margin-bottom: 40px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    position: relative;
+  }
+
+  /* Vertical connector line */
+  .flow::before {
+    content: '';
+    position: absolute;
+    left: 36px;
+    top: 40px;
+    bottom: 40px;
+    width: 2px;
+    background: linear-gradient(to bottom, #0ea5e9, #06b6d4, #14b8a6, #10b981, #059669);
+    opacity: 0.3;
+  }
+
+  .step {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 0;
+    position: relative;
+    animation: fadeIn 0.5s ease forwards;
+    opacity: 0;
+  }
+
+  @keyframes fadeIn {
+    to { opacity: 1; }
+  }
+
+  .step:nth-child(1) { animation-delay: 0.05s; }
+  .step:nth-child(2) { animation-delay: 0.1s; }
+  .step:nth-child(3) { animation-delay: 0.15s; }
+  .step:nth-child(4) { animation-delay: 0.2s; }
+  .step:nth-child(5) { animation-delay: 0.25s; }
+  .step:nth-child(6) { animation-delay: 0.3s; }
+  .step:nth-child(7) { animation-delay: 0.35s; }
+  .step:nth-child(8) { animation-delay: 0.4s; }
+  .step:nth-child(9) { animation-delay: 0.45s; }
+  .step:nth-child(10) { animation-delay: 0.5s; }
+  .step:nth-child(11) { animation-delay: 0.55s; }
+  .step:nth-child(12) { animation-delay: 0.6s; }
+
+  .step-number-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .step-number {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 14px;
+    color: #fff;
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+  }
+
+  .arrow-down {
+    width: 2px;
+    flex: 1;
+    min-height: 12px;
+    position: relative;
+  }
+
+  .arrow-down::after {
+    content: '▼';
+    position: absolute;
+    bottom: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    opacity: 0.5;
+  }
+
+  .step-card {
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 10px;
+    border: 1px solid;
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .step-card:hover {
+    transform: translateX(4px);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .step-icon {
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+
+  .step-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 15px;
+  }
+
+  .step-service {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .step-desc {
+    font-size: 13px;
+    color: #94a3b8;
+    line-height: 1.5;
+    margin-left: 34px;
+  }
+
+  .step-cmd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 6px;
+    margin-left: 34px;
+    padding: 6px 10px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 4px;
+    display: inline-block;
+  }
+
+  /* Color themes per phase */
+  .phase-local .step-number { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+  .phase-local .step-card { background: rgba(139, 92, 246, 0.06); border-color: rgba(139, 92, 246, 0.2); }
+  .phase-local .step-title { color: #a78bfa; }
+  .phase-local .step-service { background: rgba(139, 92, 246, 0.15); color: #c4b5fd; }
+  .phase-local .arrow-down::after { color: #8b5cf6; }
+
+  .phase-infra .step-number { background: linear-gradient(135deg, #0ea5e9, #0284c7); }
+  .phase-infra .step-card { background: rgba(14, 165, 233, 0.06); border-color: rgba(14, 165, 233, 0.2); }
+  .phase-infra .step-title { color: #38bdf8; }
+  .phase-infra .step-service { background: rgba(14, 165, 233, 0.15); color: #7dd3fc; }
+  .phase-infra .arrow-down::after { color: #0ea5e9; }
+
+  .phase-deploy .step-number { background: linear-gradient(135deg, #10b981, #059669); }
+  .phase-deploy .step-card { background: rgba(16, 185, 129, 0.06); border-color: rgba(16, 185, 129, 0.2); }
+  .phase-deploy .step-title { color: #34d399; }
+  .phase-deploy .step-service { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+  .phase-deploy .arrow-down::after { color: #10b981; }
+
+  .phase-ops .step-number { background: linear-gradient(135deg, #f59e0b, #d97706); }
+  .phase-ops .step-card { background: rgba(245, 158, 11, 0.06); border-color: rgba(245, 158, 11, 0.2); }
+  .phase-ops .step-title { color: #fbbf24; }
+  .phase-ops .step-service { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+  .phase-ops .arrow-down::after { color: #f59e0b; }
+
+  .phase-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 700;
+    padding: 14px 0 8px 78px;
+    opacity: 0.6;
+  }
+
+  .phase-local .phase-label { color: #a78bfa; }
+  .phase-infra .phase-label { color: #38bdf8; }
+  .phase-deploy .phase-label { color: #34d399; }
+  .phase-ops .phase-label { color: #fbbf24; }
+
+  .flow-summary {
+    margin-top: 32px;
+    padding: 20px 24px;
+    background: linear-gradient(135deg, rgba(14,165,233,0.08), rgba(16,185,129,0.08));
+    border: 1px solid rgba(14,165,233,0.2);
+    border-radius: 10px;
+    text-align: center;
+  }
+
+  .flow-summary-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: #38bdf8;
+    margin-bottom: 10px;
+  }
+
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  .flow-arrow span {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+
+  .flow-arrow .arr { color: #475569; font-size: 14px; }
+
+  .fa-local { background: rgba(139,92,246,0.15); color: #c4b5fd; }
+  .fa-infra { background: rgba(14,165,233,0.15); color: #7dd3fc; }
+  .fa-deploy { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+  .fa-ops { background: rgba(245,158,11,0.15); color: #fcd34d; }
+
+  @media print {
+    body { background: #fff; color: #1e293b; padding: 20px; }
+    .step-card { border: 1px solid #e2e8f0; }
+    .step-desc { color: #475569; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>ECS Fargate — Full Deployment Flow</h1>
+  <p class="subtitle">12 steps from code to production</p>
+
+  <div class="flow">
+
+    <!-- PHASE: LOCAL DEVELOPMENT -->
+    <div class="phase-local">
+      <div class="phase-label">Phase 1 — Build & Push</div>
+    </div>
+
+    <div class="step phase-local">
+      <div class="step-number-col">
+        <div class="step-number">1</div>
+        <div class="arrow-down"></div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-icon">📝</span>
+          <span class="step-title">Create Application</span>
+          <span class="step-service">Local</span>
+        </div>
+        <div class="step-desc">Write your app code (app.py), requirements, and Dockerfile. App listens on port <strong>8080</strong> (non-root user can't bind to port 80).</div>
+      </div>
+    </div>
+
+    <div class="step phase-local">
+      <div class="step-number-col">
+        <div class="step-number">2</div>
+        <div class="arrow-down"></div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-icon">📦</span>
+          <span class="step-title">Build & Push to ECR</span>
+          <span class="step-service">Amazon ECR</span>
+        </div>
+        <div class="step-desc">Create private ECR repo, authenticate Docker, build image, tag, and push. ECR stores your image securely with vulnerability scanning.</div>
+        <div class="step-cmd">docker build → docker tag → docker push</div>
+      </div>
+    </div>
+
+    <!-- PHASE: INFRASTRUCTURE -->
+    <div class="phase-infra">
+      <div class="phase-label">Phase 2 — Infrastructure Setup</div>
+    </div>
+
+    <div class="step phase-infra">
+      <div class="step-number-col">
+        <div class="step-number">3</div>
+        <div class="arrow-down"></div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-icon">🏗️</span>
+          <span class="step-title">Create ECS Cluster</span>
+          <span class="step-service">Amazon ECS</span>
+        </div>
+        <div class="step-desc">Logical grouping for your services and tasks. Configured with Fargate as the only capacity provider — no EC2 instances to manage.</div>
+        <div class="step-cmd">aws ecs create-cluster --capacity-providers FARGATE</div>
+      </div>
+    </div>
+
+    <div class="step phase-infra">
+      <div class="step-number-col">
+        <div class="step-number">4</div>
+        <div class="arrow-down"></div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-icon">🔐</span>
+          <span class="step-title">Create IAM Execution Role</span>
+          <span class="step-service">AWS IAM</span>
+        </div>
+        <div class="step-desc"><strong>Task Execution Role</strong> — lets the ECS agent pull images from ECR and write logs to CloudWatch. Includes inline policy for <code>logs:CreateLogGroup</code>.</div>
+        <div class="step-cmd">Trust: ecs-tasks.amazonaws.com + AmazonECSTaskExecutionRolePolicy</div>
+      </div>
+    </div>
+
+    <div class="step phase-infra">
+      <div class="step-number-col">
+        <div class="step-number">5</div>
+        <div class="arrow-down"></div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-icon">📋</span>
+          <span class="step-title">Create Task Definition</span>
+          <span class="step-service">Amazon ECS</span>
+        </div>
+        <div class="step-desc">Blueprint for your container — specifies image URI, CPU/memory (512/1024), port 8080, environment variables, log configuration (awslogs → CloudWatch), and health check.</div>
+        <div class="step-cmd">aws ecs register-task-definition --cli-input-json file://task-def.json</div>
+      </div>
+    </div>
+
+    <div class="step phase-infra">
+      <div class="step-number-col">
+        <div class="step-number">6</div>
+        <div class="arrow-down"></div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-icon">⚖️</span>
+          <span class="step-title">Create ALB + Target Group + Listener</span>
+          <span class="step-service">Elastic Load Balancing</span>
+        </div>
+        <div class="step-desc">
+          <strong>ALB</strong> — internet-facing, listens on port 80.<br/>
+          <strong>Target Group</strong> — IP type, forwards to port 8080, health checks on <code>/health</code>.<br/>
+          <strong>Listener</strong> — routes port 80 traffic → target group.
+        </div>
+        <div class="step-cmd">Internet :80 → ALB → Target Group → Container :8080</div>
+      </div>
+    </div>
+
+    <div class="step phase-infra">
+      <div class="step-number-col">
+        <div class="step-number">7</div>
+        <div class="arrow-down"></div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-icon">🛡️</span>
+          <span class="step-title">Create Security Groups</span>
+          <span class="step-service">Amazon VPC</span>
+        </div>
+        <div class="step-desc">
+          <strong>ALB SG</strong> — allows inbound port 80 from 0.0.0.0/0 (internet).<br/>
+          <strong>Task SG</strong> — allows inbound port 8080 only from ALB SG (no direct access).
+        </div>
+      </div>
+    </div>
+
+    <!-- PHASE: DEPLOY -->
+    <div class="phase-deploy">
+      <div class="phase-label">Phase 3 — Deploy & Scale</div>
+    </div>
+
+    <div class="step phase-deploy">
+      <div class="step-number-col">
+        <div class="step-number">8</div>
+        <div class="arrow-down"></div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-icon">🚀</span>
+          <span class="step-title">Create ECS Service</span>
+          <span class="step-service">Amazon ECS</span>
+        </div>
+        <div class="step-desc">The orchestrator — runs 2 task replicas across AZs, attaches to ALB target group on port 8080, enables self-healing, rolling deployments, and 60s health check grace period.</div>
+        <div class="step-cmd">aws ecs create-service --desired-count 2 --launch-type FARGATE</div>
+      </div>
+    </div>
+
+    <div class="step phase-deploy">
+      <div class="step-number-col">
+        <div class="step-number">9</div>
+        <div class="arrow-down"></div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-icon">📈</span>
+          <span class="step-title">Configure Auto Scaling</span>
+          <span class="step-service">Application Auto Scaling</span>
+        </div>
+        <div class="step-desc">Target tracking policy — scale out when avg CPU > 70%. Min 2, max 10 tasks. Scale-out cooldown 60s (fast), scale-in cooldown 300s (conservative).</div>
+      </div>
+    </div>
+
+    <!-- PHASE: OPERATE -->
+    <div class="phase-ops">
+      <div class="phase-label">Phase 4 — Test & Operate</div>
+    </div>
+
+    <div class="step phase-ops">
+      <div class="step-number-col">
+        <div class="step-number">10</div>
+        <div class="arrow-down"></div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-icon">🧪</span>
+          <span class="step-title">Test Application</span>
+          <span class="step-service">curl / Apache Bench</span>
+        </div>
+        <div class="step-desc">Hit ALB DNS with curl — verify health, CRUD operations, and load balancing (compare <code>container_id</code> across requests). Run <code>ab</code> to trigger auto-scaling.</div>
+      </div>
+    </div>
+
+    <div class="step phase-ops">
+      <div class="step-number-col">
+        <div class="step-number">11</div>
+        <div class="arrow-down"></div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-icon">📊</span>
+          <span class="step-title">View Logs & Metrics</span>
+          <span class="step-service">Amazon CloudWatch</span>
+        </div>
+        <div class="step-desc">All container logs stream to CloudWatch log group <code>/ecs/todo-api</code>. Container Insights provides CPU, memory, and network metrics per service and task.</div>
+      </div>
+    </div>
+
+    <div class="step phase-ops">
+      <div class="step-number-col">
+        <div class="step-number">12</div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-icon">🧹</span>
+          <span class="step-title">Clean Up</span>
+          <span class="step-service">All Services</span>
+        </div>
+        <div class="step-desc">Delete in reverse order: auto-scaling → service → ALB/listener/TG → security groups → log group → IAM role → task definitions → cluster → ECR repo.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Summary flow -->
+  <div class="flow-summary">
+    <div class="flow-summary-title">End-to-End Request Flow</div>
+    <div class="flow-arrow">
+      <span class="fa-local">Developer</span>
+      <span class="arr">→</span>
+      <span class="fa-local">Docker Build</span>
+      <span class="arr">→</span>
+      <span class="fa-local">ECR Push</span>
+      <span class="arr">→</span>
+      <span class="fa-infra">Task Definition</span>
+      <span class="arr">→</span>
+      <span class="fa-deploy">ECS Service</span>
+      <span class="arr">→</span>
+      <span class="fa-deploy">Fargate Tasks</span>
+      <span class="arr">→</span>
+      <span class="fa-infra">ALB :80</span>
+      <span class="arr">→</span>
+      <span class="fa-ops">Users</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

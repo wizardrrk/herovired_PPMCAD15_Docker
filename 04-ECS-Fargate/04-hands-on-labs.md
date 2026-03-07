@@ -717,7 +717,303 @@ watch -n 5 "aws ecs describe-services \
 
 ---
 
-### Step 11: View Logs and Metrics
+### (Optional) Step 11: Configure HTTPS (Port 443) on the ALB
+
+> **Why?** In production, you should never expose your application over plain HTTP. HTTPS encrypts traffic between users and your load balancer using TLS/SSL. This section walks through adding an HTTPS listener on port 443 to the ALB we already created, and redirecting HTTP traffic to HTTPS.
+
+---
+
+#### Pre-requisites for HTTPS
+
+You need **two things** before adding a 443 listener:
+
+```
+1. A registered domain name (e.g., myapp.example.com)
+   → You can buy one through Route 53 or any domain registrar
+
+2. An SSL/TLS certificate for that domain
+   → We'll use AWS Certificate Manager (ACM) to get one for FREE
+```
+
+```
+HTTPS Traffic Flow:
+────────────────────────────────────────────────────────────────────
+
+  User (browser)
+      ↓  HTTPS (port 443, encrypted)
+  ALB (terminates SSL — decrypts here)
+      ↓  HTTP (port 8080, plain — inside AWS private network)
+  ECS Task (container)
+
+  This is called "SSL Termination at the Load Balancer"
+  → The ALB handles encryption/decryption
+  → Your container still listens on plain HTTP (no code change needed)
+```
+
+---
+
+#### Step A: Request an SSL Certificate from ACM
+
+**Request a public certificate:**
+
+```bash
+CERT_ARN=$(aws acm request-certificate \
+    --domain-name "app.example.com" \
+    --validation-method DNS \
+    --region $REGION \
+    --query 'CertificateArn' \
+    --output text)
+
+echo "Certificate ARN: $CERT_ARN"
+```
+
+| Parameter | Meaning |
+|---|---|
+| `--domain-name` | The domain this certificate will cover |
+| `--validation-method DNS` | Prove you own the domain by adding a DNS record |
+
+> **Wildcard certificate:** Use `*.example.com` as the domain name if you want the certificate to cover all subdomains (app.example.com, api.example.com, etc.)
+
+**Get the DNS validation record:**
+
+```bash
+aws acm describe-certificate \
+    --certificate-arn $CERT_ARN \
+    --region $REGION \
+    --query 'Certificate.DomainValidationOptions[0].ResourceRecord'
+```
+
+This will output something like:
+
+```json
+{
+    "Name": "_abc123.app.example.com.",
+    "Type": "CNAME",
+    "Value": "_def456.acm-validations.aws."
+}
+```
+
+**Add this CNAME record to your DNS (Route 53 or your domain provider).**
+
+If using Route 53, you can automate this:
+
+```bash
+# Get the hosted zone ID for your domain
+HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name \
+    --dns-name "example.com" \
+    --query 'HostedZones[0].Id' \
+    --output text)
+
+# Get validation record details
+VALIDATION_NAME=$(aws acm describe-certificate \
+    --certificate-arn $CERT_ARN \
+    --region $REGION \
+    --query 'Certificate.DomainValidationOptions[0].ResourceRecord.Name' \
+    --output text)
+
+VALIDATION_VALUE=$(aws acm describe-certificate \
+    --certificate-arn $CERT_ARN \
+    --region $REGION \
+    --query 'Certificate.DomainValidationOptions[0].ResourceRecord.Value' \
+    --output text)
+
+# Create the DNS validation record
+cat > dns-validation.json << EOF
+{
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "$VALIDATION_NAME",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          { "Value": "$VALIDATION_VALUE" }
+        ]
+      }
+    }
+  ]
+}
+EOF
+
+aws route53 change-resource-record-sets \
+    --hosted-zone-id $HOSTED_ZONE_ID \
+    --change-batch file://dns-validation.json
+```
+
+**Wait for certificate validation (can take 5-30 minutes):**
+
+```bash
+aws acm wait certificate-validated \
+    --certificate-arn $CERT_ARN \
+    --region $REGION
+
+echo "Certificate validated!"
+```
+
+**Verify certificate status:**
+
+```bash
+aws acm describe-certificate \
+    --certificate-arn $CERT_ARN \
+    --region $REGION \
+    --query 'Certificate.Status'
+
+# Should return: "ISSUED"
+```
+
+---
+
+#### Step B: Allow HTTPS Traffic on the ALB Security Group
+
+The ALB security group currently only allows port 80. We need to open port 443 as well:
+
+```bash
+aws ec2 authorize-security-group-ingress \
+    --group-id $ALB_SG_ID \
+    --protocol tcp \
+    --port 443 \
+    --cidr 0.0.0.0/0 \
+    --region $REGION
+
+echo "Port 443 opened on ALB security group"
+```
+
+---
+
+#### Step C: Create the HTTPS Listener (Port 443)
+
+```bash
+HTTPS_LISTENER_ARN=$(aws elbv2 create-listener \
+    --load-balancer-arn $ALB_ARN \
+    --protocol HTTPS \
+    --port 443 \
+    --ssl-policy ELBSecurityPolicy-TLS13-1-2-2021-06 \
+    --certificates CertificateArn=$CERT_ARN \
+    --default-actions Type=forward,TargetGroupArn=$TG_ARN \
+    --region $REGION \
+    --query 'Listeners[0].ListenerArn' \
+    --output text)
+
+echo "HTTPS Listener ARN: $HTTPS_LISTENER_ARN"
+```
+
+| Parameter | Meaning |
+|---|---|
+| `--protocol HTTPS` | Listen for encrypted HTTPS traffic |
+| `--port 443` | Standard HTTPS port |
+| `--ssl-policy` | TLS policy defining minimum TLS version and cipher suites |
+| `--certificates` | The ACM certificate ARN to use for SSL termination |
+| `Type=forward` | Forward decrypted traffic to the target group (ECS tasks on port 8080) |
+
+> **SSL Policy:** `ELBSecurityPolicy-TLS13-1-2-2021-06` enforces TLS 1.2 as the minimum version and supports TLS 1.3. This is the recommended policy for production. Avoid older policies that allow TLS 1.0 or 1.1.
+
+---
+
+#### Step D: Redirect HTTP (80) → HTTPS (443)
+
+Now that HTTPS is working, you should redirect all HTTP traffic to HTTPS so users are always on a secure connection:
+
+**Modify the existing HTTP listener to redirect instead of forwarding:**
+
+```bash
+aws elbv2 modify-listener \
+    --listener-arn $LISTENER_ARN \
+    --default-actions '[{
+        "Type": "redirect",
+        "RedirectConfig": {
+            "Protocol": "HTTPS",
+            "Port": "443",
+            "StatusCode": "HTTP_301"
+        }
+    }]' \
+    --region $REGION
+
+echo "HTTP → HTTPS redirect configured"
+```
+
+| Parameter | Meaning |
+|---|---|
+| `Type: redirect` | Don't forward traffic, redirect the user instead |
+| `Protocol: HTTPS` | Redirect to HTTPS |
+| `Port: 443` | Redirect to port 443 |
+| `HTTP_301` | Permanent redirect (browsers remember and go directly to HTTPS next time) |
+
+**What happens now:**
+
+```
+Before redirect:
+  http://app.example.com  → ALB → ECS (plain HTTP, insecure)
+  https://app.example.com → ALB → ECS (encrypted)
+
+After redirect:
+  http://app.example.com  → ALB → 301 redirect → https://app.example.com
+  https://app.example.com → ALB (terminates SSL) → ECS (port 8080)
+```
+
+---
+
+#### Step E: Point Your Domain to the ALB (Route 53)
+
+Create an Alias record pointing your domain to the ALB:
+
+```bash
+cat > alias-record.json << EOF
+{
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "app.example.com",
+        "Type": "A",
+        "AliasTarget": {
+          "HostedZoneId": "$(aws elbv2 describe-load-balancers \
+              --load-balancer-arns $ALB_ARN \
+              --query 'LoadBalancers[0].CanonicalHostedZoneId' \
+              --output text \
+              --region $REGION)",
+          "DNSName": "$(aws elbv2 describe-load-balancers \
+              --load-balancer-arns $ALB_ARN \
+              --query 'LoadBalancers[0].DNSName' \
+              --output text \
+              --region $REGION)",
+          "EvaluateTargetHealth": true
+        }
+      }
+    }
+  ]
+}
+EOF
+
+aws route53 change-resource-record-sets \
+    --hosted-zone-id $HOSTED_ZONE_ID \
+    --change-batch file://alias-record.json
+
+echo "DNS Alias record created: app.example.com → ALB"
+```
+
+> **Why Alias instead of CNAME?** AWS Alias records are free (no Route 53 query charges), work at the zone apex (e.g., `example.com` without `www`), and automatically resolve to the ALB's changing IP addresses.
+
+---
+
+#### Step F: Test HTTPS
+
+```bash
+# Test HTTPS directly
+curl -s https://app.example.com/health
+
+# Verify HTTP redirects to HTTPS
+curl -sI http://app.example.com/health
+# Should return: HTTP/1.1 301 Moved Permanently
+# Location: https://app.example.com:443/health
+
+# Check SSL certificate details
+echo | openssl s_client -servername app.example.com -connect app.example.com:443 2>/dev/null | openssl x509 -noout -dates -subject
+```
+
+---
+
+### Step 12: View Logs and Metrics
 
 **View logs:**
 
