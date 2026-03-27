@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nginx
+  labels:
+    app: nginx
+spec:
+  type: ClusterIP # Optional, as default service type is ClusterIP itself
+  selector:
+    app: nginx
+  ports:
+  - port: 80 # Required, the port on which the service will be accessible within the cluster
+    targetPort: 80 # Optional, if this is not provided then Kubernetes assumes the targetPort same as port
+    protocol: TCP # Optional, as default protocol is TCP itself
