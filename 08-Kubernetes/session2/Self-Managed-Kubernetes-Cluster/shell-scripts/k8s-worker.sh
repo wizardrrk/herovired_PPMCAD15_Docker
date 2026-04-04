@@ -1,6 +1,8 @@
 #!/bin/bash
 
-# For Ubuntu DISTRIB_RELEASE=22
+# For Ubuntu DISTRIB_RELEASE=22/24
+#Always become "root" to run this script
+
 
 # Update the system
 sudo apt-get update

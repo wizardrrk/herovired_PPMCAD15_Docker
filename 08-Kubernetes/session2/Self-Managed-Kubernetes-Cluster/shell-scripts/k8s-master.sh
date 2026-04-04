@@ -4,6 +4,7 @@
 #6443 from 0.0.0.0/0
 #2379 - 2380 from same-security-group-id
 #10250 - 10252 from same-security-group-id
+#Always become "root" to run this script
 
 # For Ubuntu DISTRIB_RELEASE=22/24
 
@@ -87,7 +88,7 @@ rm -f crictl-$CRICTL_VERSION-linux-$CRICTL_ARCH.tar.gz
 crictl version
 
 # Initialize the cluster
-kubeadm init --control-plane-endpoint <master-node-public-ip>:6443 --kubernetes-version 1.33.10 --pod-network-cidr 192.168.0.0/16 --v=5
+kubeadm init --control-plane-endpoint <master-node-public-ip>:6443 --kubernetes-version 1.33.10 --pod-network-cidr 192.168.0.0/16 --v=5 --ignore-preflight-errors=NumCPU,Mem
 
 # Breakdown the above command:
 
@@ -98,7 +99,7 @@ kubeadm init --control-plane-endpoint <master-node-public-ip>:6443 --kubernetes-
 # This specifies the stable address (IP or DNS name) and port that other nodes (workers) and kubectl users will use to communicate with the API server on this control plane node.
 # <master-node-public-ip> is a placeholder you MUST replace with the actual public IP address of this machine.
 # <PORT> is typically 6443 (the default Kubernetes API server secure port).
-# --kubernetes-version 1.30.3: Specifies the Kubernetes version to initialize, matching the installed packages.
+# --kubernetes-version 1.33.10: Specifies the Kubernetes version to initialize, matching the installed packages.
 # --pod-network-cidr 192.168.0.0/16: Defines the IP address range from which Pods will get their IP addresses.
 # This CIDR (Classless Inter-Domain Routing) block should not overlap with your node IPs or any other network ranges in your infrastructure.
 # The CNI (Container Network Interface) plugin you install later will use this range.

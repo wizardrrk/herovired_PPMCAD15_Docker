@@ -1,0 +1,130 @@
+# Create demo applications
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app1-config
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <body>
+        <h1>Hello, World, I am serving from <praful> app1!</h1>
+    </body>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: app1
+  template:
+    metadata:
+      labels:
+        app: app1
+    spec:
+      containers:
+      - name: app1
+        image: nginx
+        volumeMounts:
+        - name: app1-volume
+          mountPath: /usr/share/nginx/html/praful-app1
+        ports:
+        - containerPort: 80
+      volumes:
+      - name: app1-volume
+        configMap:
+          name: app1-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app1-service
+spec:
+  selector:
+    app: app1
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app2-config
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <body>
+        <h1>Hello, World, I am serving from app2!</h1>
+    </body>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app2
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: app2
+  template:
+    metadata:
+      labels:
+        app: app2
+    spec:
+      containers:
+      - name: app2
+        image: nginx
+        volumeMounts:
+        - name: app2-volume
+          mountPath: /usr/share/nginx/html/praful-app2
+        ports:
+        - containerPort: 80
+      volumes:
+      - name: app2-volume
+        configMap:
+          name: app2-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app2-service
+spec:
+  selector:
+    app: app2
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+
+# Ingress using Ingres Nginx Controller
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-ingress-nginx
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /praful-app1
+        pathType: Prefix
+        backend:
+          service:
+            name: app1-service
+            port: 
+              number: 80
+      - path: /praful-app2
+        pathType: Prefix
+        backend:
+          service:
+            name: app2-service
+            port: 
+              number: 80

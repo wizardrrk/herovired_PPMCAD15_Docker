@@ -1,4 +1,4 @@
-# Session 2: Self-Managed Kubernetes with Kubeadm
+# Session 8-02: Self-Managed Kubernetes with Kubeadm
 ## Hands-On Labs
 
 
@@ -73,6 +73,7 @@ or from Bash:
 cd ~/.kube/
 vim self-managed-cluster-config # Paste the content from the master node "/etc/kubernetes/admin.conf" to self-managed-cluster-config file
 KUBECONFIG=~/.kube/config:~/.kube/self-managed-cluster-config kubectl config view --flatten > config-merged
+cp config config_bak
 mv config-merged config
 ```
 
@@ -81,6 +82,8 @@ mv config-merged config
 
 # Verify
 kubectl config current-context
+kubectl config get-contexts
+kubectl config use-context <CONTEXT_NAME>
 # Should show "kubernetes-admin@kubernetes"
 
 #### 2.5: Verify Cluster Access

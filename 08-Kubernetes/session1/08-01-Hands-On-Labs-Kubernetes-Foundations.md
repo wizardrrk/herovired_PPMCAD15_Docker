@@ -1,4 +1,4 @@
-# Session 8: Kubernetes Foundations
+# Session 8-01: Kubernetes Foundations
 ## Minikube Setup, First Pod & kubectl Essentials
 
 ---
@@ -11,7 +11,7 @@
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Docker | Latest | docker.com/get-docker |
+| Docker | Latest | https://github.com/aryanm12/PPMCAD15/blob/main/01-Docker%26Containers/01-docker-installation-guide.md |
 | kubectl | Latest | See Step 1 below |
 | Minikube | Latest | See Step 1 below |
 | Git | Latest | `brew install git` / `sudo apt install git` |
