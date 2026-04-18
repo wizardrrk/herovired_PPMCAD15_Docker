@@ -82,6 +82,11 @@ Successfully got an update from the "eks" chart repository
 
 ### Step 5 - Install the AWS Load Balancer Controller
 
+Connect to your EKS cluster
+```bash
+aws eks update-kubeconfig --region <aws-region> --name <your-cluster-name>
+```
+
 Make sure to update the command with actual values from your EKS cluster
 
 ```bash
@@ -96,6 +101,17 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
   --set enableWaf="false" \
   --set enableWafv2="false"
 ```
+
+working command for mac:
+
+helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=EKS-B15 \
+  --set serviceAccount.create=true \
+  --set serviceAccount.name=aws-load-balancer-controller \
+  --set-string serviceAccount.annotations.eks\\.amazonaws\\.com\\/role-arn=arn:aws:iam::233245302554:role/AWSLBCROLE \
+  --set region=ap-south-1 \
+  --set vpcId=vpc-067db2a4438ac151a
 
 ---
 

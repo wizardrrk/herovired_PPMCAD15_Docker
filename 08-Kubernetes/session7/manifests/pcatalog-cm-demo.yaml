@@ -1,0 +1,9 @@
+# Product Catalog ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: product-catalog-config-demo
+data:
+  DATABASE_URL: "postgres://user:password@product-db:5432/catalog"
+  CACHE_URL: "redis://product-cache:6379"
+  LOG_LEVEL: "info"
