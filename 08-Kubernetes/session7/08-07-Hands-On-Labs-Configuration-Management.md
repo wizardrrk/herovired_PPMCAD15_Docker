@@ -1,4 +1,5 @@
-# Session 7: Configuration Management — Hands-On Labs
+# Session 8-07: Ingress with AWS Load Balancer Controller - Hands-On Labs
+
 
 This document contains 6 practical labs to build hands-on experience with ConfigMaps, Secrets, Namespaces, and DaemonSets.
 
@@ -99,6 +100,7 @@ spec:
 kubectl apply -f deploy-with-env.yaml
 kubectl logs deployment/app-deploy-env
 ```
+
 
 Expected output shows environment variables properly set.
 
@@ -495,7 +497,7 @@ Updated content should be served (note: updates can take up to 60 seconds to pro
 
 ---
 
-## Lab 4: Namespace Management & Resource Quotas
+## Lab 4: Namespace Management
 
 ### Objective
 Create and manage namespaces, set resource quotas and limit ranges, and deploy applications across namespaces.
