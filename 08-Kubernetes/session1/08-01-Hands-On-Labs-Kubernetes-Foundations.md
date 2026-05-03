@@ -192,7 +192,7 @@ You'll see three main sections. Let's break them down:
 clusters:
 - cluster:
     certificate-authority: /path/to/ca.crt
-    server: https://192.168.49.2:8443    # <-- Minikube API server address
+    server: https://127.0.0.1:64546    # <-- Minikube API server address
   name: minikube
 ```
 
@@ -245,11 +245,13 @@ Finds current-context: minikube
          ↓
 Looks up context "minikube" → cluster: minikube, user: minikube
          ↓
-Connects to server: https://192.168.49.2:8443
+Connects to server: https://127.0.0.1:64546
 Uses client certificate for authentication
          ↓
 API Server returns the list of pods
 ```
+<img width="1536" height="1024" alt="kubectl_connection_componants" src="https://github.com/user-attachments/assets/f8954ba8-88ae-45a2-b755-f4577251c1dc" />
+
 
 > **Why this matters:** When you later work with EKS (AWS managed Kubernetes) or self managed Kubernetes Cluster, new contexts will get added to this same file. You'll switch between your local Minikube and cloud EKS cluster using `kubectl config use-context`.
 
